@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from datetime import datetime
 import os
+
 import pymongo
 
 
@@ -21,6 +23,7 @@ class MongoDb(object):
         if all((USERNAME, PASSWORD)):
             self._client.postmon.authenticate(USERNAME, PASSWORD)
         self._db = self._client.postmon
+        self.packtrack = PackTrack(self._db.packtrack)
 
     def get_one(self, cep, **kwargs):
         r = self._db.ceps.find_one({'cep': cep}, **kwargs)
@@ -60,3 +63,48 @@ class MongoDb(object):
 
     def remove(self, cep):
         self._db.ceps.remove({'cep': cep})
+
+
+class PackTrack(object):
+
+    def __init__(self, collection):
+        self._collection = collection
+
+    def get_one(self, provider, track):
+        spec = {'servico': provider, 'codigo': track}
+        return self._collection.find_one(spec)
+
+    def get_all(self):
+        return self._collection.find()
+
+    def register_callback(self, provider, track, callback):
+        key = {'servico': provider, 'codigo': track}
+        data = {
+            '$addToSet': {
+                '_meta.callbacks': callback,
+            },
+            '$setOnInsert': {
+                '_meta.created_at': datetime.now(),
+                '_meta.changed_at': None,
+                '_meta.checked_at': None,
+            },
+        }
+        self._collection.find_and_modify(key, data, upsert=True)
+        obj = self._collection.find_one(key)
+        return str(obj['_id'])
+
+    def update_response(self, provider, track, data, changed):
+        key = {'servico': provider, 'codigo': track}
+        now = datetime.now()
+
+        set_ = {
+            "_meta.checked_at": now
+        }
+        if changed:
+            set_.update({
+                '_meta.changed_at': now,
+                'payload': data,
+            })
+
+        query = {"$set": set_}
+        self._collection.update(key, query)

@@ -201,6 +201,25 @@ def track_pack(provider, track):
     return make_error(message)
 
 
+@app_v1.route('/rastreio/<provider>/<track>', method='POST')
+def register_track_pack(provider, track):
+    """
+    Registra o rastreamento do pacote, indicando o callback e informações
+    adicionais.
+    """
+    # TODO: limitar o tamanho do request
+    try:
+        result = PackTracker.register(provider, track, request.json)
+    except (AttributeError, ValueError):
+        message = "400 Falha no registro do %s/%s" % (provider, track)
+        logger.exception(message)
+        return make_error(message)
+    else:
+        return format_result({
+            'token': result,
+        })
+
+
 @app.route('/crossdomain.xml')
 def crossdomain():
     response.content_type = 'application/xml'
